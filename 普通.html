@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D迷宫探险</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            touch-action: none;
+            user-select: none;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #121212;
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #header {
+            height: 100px;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding-bottom: 20px;
+            background-color: #1a1a1a;
+            z-index: 10;
+        }
+        
+        #game-title {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        #game-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #game-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        #controls {
+            height: 100px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: #1a1a1a;
+            padding: 10px;
+            text-align: center;
+            font-size: 14px;
+            color: #aaa;
+        }
+        
+        #start-screen, #win-screen {
+            position: absolute;
+            top: 100px;
+            left: 0;
+            right: 0;
+            bottom: 100px;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+        }
+        
+        .screen-title {
+            font-size: 28px;
+            margin-bottom: 30px;
+            color: #fff;
+        }
+        
+        .screen-button {
+            padding: 12px 30px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        
+        .screen-button:hover {
+            background-color: #45a049;
+        }
+        
+        #joystick-container {
+            position: absolute;
+            bottom: 120px;
+            left: 30px;
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #joystick {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.3);
+            position: relative;
+        }
+        
+        #instructions {
+            margin-top: 10px;
+        }
+        
+        #coordinates {
+            position: absolute;
+            top: 50px;
+            left: 10px;
+            font-size: 14px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            z-index: 15;
+        }
+        
+        #exit-button {
+            position: absolute;
+            top: 12px;
+            left: 10px;
+            font-size: 14px;
+            color: white;
+            background-color: rgba(255, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            z-index: 15;
+            cursor: pointer;
+        }
+        
+        #exit-button:hover {
+            background-color: rgba(255, 0, 0, 0.7);
+        }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <div id="game-title">3D迷宫探险</div>
+    </div>
+    
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        
+        <div id="coordinates" style="display: none;"></div>
+        <div id="exit-button" style="display: none;">退出</div>
+        
+        <div id="start-screen">
+            <div class="screen-title">3D迷宫探险</div>
+            <p>滑动屏幕旋转视角</p>
+            <p>使用摇杆移动角色</p>
+            <p>找到终点即可获胜</p>
+            <button class="screen-button" id="start-button">开始游戏</button>
+        </div>
+        
+        <div id="win-screen" style="display: none;">
+            <div class="screen-title">恭喜通关!</div>
+            <p>你成功找到了迷宫终点</p>
+            <button class="screen-button" id="restart-button">再玩一次</button>
+        </div>
+        
+        <div id="joystick-container">
+            <div id="joystick"></div>
+        </div>
+    </div>
+    
+    <div id="controls">
+        <div>滑动屏幕旋转视角</div>
+        <div id="instructions">使用左下角摇杆移动 - 向上推前进</div>
+    </div>
+
+    <script>
+        class MazeGame {
+            constructor() {
+                this.canvas = document.getElementById('game-canvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.startScreen = document.getElementById('start-screen');
+                this.winScreen = document.getElementById('win-screen');
+                this.startButton = document.getElementById('start-button');
+                this.restartButton = document.getElementById('restart-button');
+                this.instructions = document.getElementById('instructions');
+                this.coordinatesDisplay = document.getElementById('coordinates');
+                this.exitButton = document.getElementById('exit-button');
+                
+                // 游戏状态
+                this.gameStarted = false;
+                this.gameWon = false;
+                
+                // 迷宫参数
+                this.mazeSize = 31;
+                this.cellSize = 1;
+                this.wallHeight = 1;
+                
+                // 玩家参数
+                this.playerX = 1.5;
+                this.playerY = 1.5;
+                this.playerAngle = Math.PI / 4;
+                this.playerPitch = 0; // 垂直视角
+                this.playerSpeed = 0.05;
+                this.rotationSpeed = 0.03;
+                this.pitchSpeed = 0.02;
+                this.maxPitch = Math.PI / 4; // 最大俯仰角
+                
+                // 3D渲染参数
+                this.fov = Math.PI / 3;
+                this.halfFov = this.fov / 2;
+                this.stripeWidth = 1; // 初始值，将在resize中更新
+                this.maxDepth = 16;
+                
+                // 控制参数
+                this.touchStartX = 0;
+                this.touchStartY = 0;
+                this.isRotating = false;
+                this.isPitching = false;
+                this.joystickActive = false;
+                this.joystickX = 0;
+                this.joystickY = 0;
+                this.moveDirection = { x: 0, y: 0 };
+                
+                // 初始化
+                this.init();
+            }
+            
+            init() {
+                // 设置画布尺寸
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
+                
+                // 生成迷宫
+                this.generateMaze();
+                
+                // 设置终点
+                this.endX = this.mazeSize - 2;
+                this.endY = this.mazeSize - 2;
+                
+                // 事件监听
+                this.setupEventListeners();
+                
+                // 开始游戏循环
+                this.gameLoop();
+            }
+            
+            resizeCanvas() {
+                const container = document.getElementById('game-container');
+                this.canvas.width = container.clientWidth;
+                this.canvas.height = container.clientHeight;
+                
+                // 动态计算射线数量和条纹宽度
+                const targetStripeWidth = 1.5; // 目标条纹宽度(像素)
+                this.numRays = Math.floor(this.canvas.width / targetStripeWidth);
+                this.stripeWidth = this.canvas.width / this.numRays;
+                
+                // 限制最大射线数量以保证性能
+                const maxRays = 640;
+                if (this.numRays > maxRays) {
+                    this.numRays = maxRays;
+                    this.stripeWidth = this.canvas.width / this.numRays;
+                }
+                
+                // 调整摇杆位置
+                const joystick = document.getElementById('joystick-container');
+                joystick.style.bottom = '120px';
+            }
+            
+            generateMaze() {
+                // 创建初始网格，所有墙都存在
+                this.maze = Array(this.mazeSize).fill().map(() => 
+                    Array(this.mazeSize).fill(1)
+                );
+                
+                // 使用深度优先搜索算法生成迷宫
+                const stack = [];
+                const startX = 1, startY = 1;
+                
+                // 设置起点为通路
+                this.maze[startY][startX] = 0;
+                stack.push([startX, startY]);
+                
+                // 四个方向
+                const directions = [
+                    [1, 0],  // 右
+                    [0, 1],  // 下
+                    [-1, 0], // 左
+                    [0, -1]  // 上
+                ];
+                
+                while (stack.length > 0) {
+                    const [x, y] = stack[stack.length - 1];
+                    const shuffledDirections = [...directions].sort(() => Math.random() - 0.5);
+                    
+                    let found = false;
+                    
+                    for (const [dx, dy] of shuffledDirections) {
+                        const nx = x + dx * 2;
+                        const ny = y + dy * 2;
+                        
+                        if (nx > 0 && nx < this.mazeSize - 1 && 
+                            ny > 0 && ny < this.mazeSize - 1 && 
+                            this.maze[ny][nx] === 1) {
+                            
+                            // 打通墙壁
+                            this.maze[y + dy][x + dx] = 0;
+                            this.maze[ny][nx] = 0;
+                            stack.push([nx, ny]);
+                            found = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!found) {
+                        stack.pop();
+                    }
+                }
+            }
+            
+            setupEventListeners() {
+                // 开始按钮
+                this.startButton.addEventListener('click', () => {
+                    this.startScreen.style.display = 'none';
+                    this.coordinatesDisplay.style.display = 'block';
+                    this.exitButton.style.display = 'block';
+                    this.gameStarted = true;
+                });
+                
+                // 退出按钮
+                this.exitButton.addEventListener('click', () => {
+                    this.startScreen.style.display = 'flex';
+                    this.winScreen.style.display = 'none';
+                    this.coordinatesDisplay.style.display = 'none';
+                    this.exitButton.style.display = 'none';
+                    this.gameStarted = false;
+                    this.gameWon = false;
+                    this.playerX = 1.5;
+                    this.playerY = 1.5;
+                    this.playerAngle = Math.PI / 4;
+                    this.playerPitch = 0;
+                });
+                
+                // 重新开始按钮
+                this.restartButton.addEventListener('click', () => {
+                    this.winScreen.style.display = 'none';
+                    this.playerX = 1.5;
+                    this.playerY = 1.5;
+                    this.playerAngle = Math.PI / 4;
+                    this.playerPitch = 0;
+                    this.gameWon = false;
+                    this.generateMaze();
+                });
+                
+                // 触摸控制 - 旋转视角
+                this.canvas.addEventListener('touchstart', (e) => {
+                    if (!this.gameStarted || this.gameWon) return;
+                    
+                    const touch = e.touches[0];
+                    this.touchStartX = touch.clientX;
+                    this.touchStartY = touch.clientY;
+                    
+                    // 判断是水平旋转还是垂直视角调整
+                    if (touch.clientX > this.canvas.width / 2) {
+                        this.isRotating = true;
+                    } else {
+                        this.isPitching = true;
+                    }
+                });
+                
+                this.canvas.addEventListener('touchmove', (e) => {
+                    if (!this.gameStarted || this.gameWon) return;
+                    
+                    const touch = e.touches[0];
+                    
+                    const deltaX = touch.clientX - this.touchStartX;
+                    // 旋转视角
+                    this.playerAngle += deltaX * 0.01;
+                    this.touchStartX = touch.clientX;
+                    
+                    
+                    const deltaY = touch.clientY - this.touchStartY;
+                    // 调整垂直视角
+                    this.playerPitch -= deltaY * 0.01;
+                    // 限制垂直视角范围
+                    this.playerPitch = Math.max(-this.maxPitch, Math.min(this.maxPitch, this.playerPitch));
+                        this.touchStartY = touch.clientY;
+                    
+                });
+                
+                this.canvas.addEventListener('touchend', () => {
+                    this.isRotating = false;
+                    this.isPitching = false;
+                });
+                
+                // 摇杆控制
+                const joystick = document.getElementById('joystick');
+                const joystickContainer = document.getElementById('joystick-container');
+                const joystickRadius = 50;
+                const containerRect = joystickContainer.getBoundingClientRect();
+                const containerCenter = {
+                    x: containerRect.left + containerRect.width / 2,
+                    y: containerRect.top + containerRect.height / 2
+                };
+                
+                joystick.addEventListener('touchstart', (e) => {
+                    if (!this.gameStarted || this.gameWon) return;
+                    
+                    this.joystickActive = true;
+                    this.updateJoystick(e.touches[0]);
+                });
+                
+                document.addEventListener('touchmove', (e) => {
+                    if (!this.gameStarted || this.gameWon || !this.joystickActive) return;
+                    
+                    this.updateJoystick(e.touches[0]);
+                });
+                
+                document.addEventListener('touchend', () => {
+                    this.joystickActive = false;
+                    this.moveDirection = { x: 0, y: 0 };
+                    joystick.style.transform = 'translate(0, 0)';
+                });
+            }
+            
+            updateJoystick(touch) {
+                const joystick = document.getElementById('joystick');
+                const joystickContainer = document.getElementById('joystick-container');
+                const containerRect = joystickContainer.getBoundingClientRect();
+                const containerCenter = {
+                    x: containerRect.left + containerRect.width / 2,
+                    y: containerRect.top + containerRect.height / 2
+                };
+                const joystickRadius = 25;
+                
+                // 计算触摸点相对于摇杆中心的位置
+                let deltaX = touch.clientX - containerCenter.x;
+                let deltaY = touch.clientY - containerCenter.y;
+                
+                // 限制摇杆移动范围
+                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+                if (distance > joystickRadius) {
+                    deltaX = (deltaX / distance) * joystickRadius;
+                    deltaY = (deltaY / distance) * joystickRadius;
+                }
+                
+                // 更新摇杆位置
+                joystick.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+                
+                // 计算移动方向 (归一化) - 反转Y轴方向
+                this.moveDirection = {
+                    x: deltaX / joystickRadius,
+                    y: -deltaY / joystickRadius  // 反转Y轴
+                };
+            }
+            
+            update(deltaTime) {
+                if (!this.gameStarted || this.gameWon) return;
+                
+                // 更新坐标显示
+                this.coordinatesDisplay.textContent = `X: ${this.playerX.toFixed(1)} Y: ${this.playerY.toFixed(1)}`;
+                
+                // 移动玩家
+                if (this.moveDirection.x !== 0 || this.moveDirection.y !== 0) {
+                    const moveX = Math.cos(this.playerAngle) * this.moveDirection.y * this.playerSpeed;
+                    const moveY = Math.sin(this.playerAngle) * this.moveDirection.y * this.playerSpeed;
+                    
+                    // 同时支持左右移动
+                    const strafeX = Math.cos(this.playerAngle + Math.PI/2) * this.moveDirection.x * this.playerSpeed * 0.7;
+                    const strafeY = Math.sin(this.playerAngle + Math.PI/2) * this.moveDirection.x * this.playerSpeed * 0.7;
+                    
+                    const newX = this.playerX + moveX + strafeX;
+                    const newY = this.playerY + moveY + strafeY;
+                    
+                    // 碰撞检测
+                    if (this.maze[Math.floor(newY)][Math.floor(newX)] === 0) {
+                        this.playerX = newX;
+                        this.playerY = newY;
+                    }
+                }
+                
+                // 检查是否到达终点
+                if (Math.floor(this.playerX) === this.endX && Math.floor(this.playerY) === this.endY) {
+                    this.gameWon = true;
+                    this.winScreen.style.display = 'flex';
+                }
+            }
+            
+            draw() {
+                if (!this.gameStarted) return;
+                
+                const width = this.canvas.width;
+                const height = this.canvas.height;
+                
+                // 清空画布
+                this.ctx.clearRect(0, 0, width, height);
+                
+                // 绘制3D视图
+                this.draw3DView();
+            }
+            
+            draw3DView() {
+                const width = this.canvas.width;
+                const height = this.canvas.height;
+                
+                // 绘制天空和地面
+                this.ctx.fillStyle = '#87CEEB';
+                this.ctx.fillRect(0, 0, 0, height / 2);
+                this.ctx.fillStyle = '#654321';
+                this.ctx.fillRect(0, height / 2, 0, height / 2);
+                
+                // 射线投射
+                for (let i = 0; i < this.numRays; i++) {
+                    const rayAngle = this.playerAngle - this.halfFov + (i / this.numRays) * this.fov;
+                    
+                    // 初始化射线
+                    let rayX = this.playerX;
+                    let rayY = this.playerY;
+                    
+                    // 射线方向单位向量
+                    const rayDirX = Math.cos(rayAngle);
+                    const rayDirY = Math.sin(rayAngle);
+                    
+                    // 防止除以0
+                    const deltaDistX = rayDirX === 0 ? 1e30 : Math.abs(1 / rayDirX);
+                    const deltaDistY = rayDirY === 0 ? 1e30 : Math.abs(1 / rayDirY);
+                    
+                    // 初始化DDA算法
+                    let mapX = Math.floor(rayX);
+                    let mapY = Math.floor(rayY);
+                    
+                    let sideDistX, sideDistY;
+                    let stepX, stepY;
+                    let hit = false;
+                    let side; // 0表示x面，1表示y面
+                    
+                    // 计算步长和初始侧边距离
+                    if (rayDirX < 0) {
+                        stepX = -1;
+                        sideDistX = (rayX - mapX) * deltaDistX;
+                    } else {
+                        stepX = 1;
+                        sideDistX = (mapX + 1.0 - rayX) * deltaDistX;
+                    }
+                    
+                    if (rayDirY < 0) {
+                        stepY = -1;
+                        sideDistY = (rayY - mapY) * deltaDistY;
+                    } else {
+                        stepY = 1;
+                        sideDistY = (mapY + 1.0 - rayY) * deltaDistY;
+                    }
+                    
+                    // DDA算法
+                    let distance = 0;
+                    while (!hit && distance < this.maxDepth) {
+                        // 跳转到下一个地图方格
+                        if (sideDistX < sideDistY) {
+                            sideDistX += deltaDistX;
+                            mapX += stepX;
+                            side = 0;
+                        } else {
+                            sideDistY += deltaDistY;
+                            mapY += stepY;
+                            side = 1;
+                        }
+                        
+                        // 检查是否击中墙壁
+                        if (mapX < 0 || mapX >= this.mazeSize || mapY < 0 || mapY >= this.mazeSize) {
+                            hit = true;
+                        } else if (this.maze[mapY][mapX] === 1) {
+                            hit = true;
+                        }
+                        
+                        distance += 0.1;
+                    }
+                    
+                    // 计算击中点的距离
+                    let perpWallDist;
+                    if (side === 0) {
+                        perpWallDist = (mapX - rayX + (1 - stepX) / 2) / rayDirX;
+                    } else {
+                        perpWallDist = (mapY - rayY + (1 - stepY) / 2) / rayDirY;
+                    }
+                    
+                    // 计算墙壁高度
+                    let lineHeight = Math.floor(height / perpWallDist);
+                    
+                    // 应用垂直视角偏移
+                    const pitchOffset = Math.tan(this.playerPitch) * height;
+                    lineHeight = Math.floor(lineHeight * (1 + 0.5 * Math.abs(this.playerPitch)));
+                    
+                    // 计算绘制范围
+                    let drawStart = -lineHeight / 2 + height / 2 + pitchOffset;
+                    if (drawStart < 0) drawStart = 0;
+                    let drawEnd = lineHeight / 2 + height / 2 + pitchOffset;
+                    if (drawEnd >= height) drawEnd = height - 1;
+                    
+                    // 根据距离计算墙壁颜色
+                    let wallColor;
+                    // 根据距离和墙面计算颜色
+                    const colorValue = Math.max(50, 255 - perpWallDist * 30);
+                    if (side === 0) {
+                        wallColor = `rgba(${colorValue}, ${colorValue}, ${colorValue}, 0.8)`;
+                    } else {
+                        wallColor = `rgba(${colorValue - 30}, ${colorValue - 30}, ${colorValue - 30}, 0.8)`;
+                    }
+                    
+                    // 绘制墙壁
+                    this.ctx.fillStyle = wallColor;
+                    this.ctx.fillRect(i * this.stripeWidth, drawStart, this.stripeWidth, drawEnd - drawStart);
+                    
+                    // 绘制地板和天花板阴影
+                    const floorColor = `rgba(100, 80, 60, ${0.3 + 0.7 * (drawEnd / height)})`;
+                    this.ctx.fillStyle = floorColor;
+                    this.ctx.fillRect(i * this.stripeWidth, drawEnd, this.stripeWidth, height - drawEnd);
+                    
+                    const ceilingColor = `rgba(135, 206, 235, ${0.3 + 0.7 * (1 - drawStart / height)})`;
+                    this.ctx.fillStyle = ceilingColor;
+                    this.ctx.fillRect(i * this.stripeWidth, 0, this.stripeWidth, drawStart);
+                }
+            }
+            
+            gameLoop(timestamp = 0) {
+                // 计算时间增量
+                if (!this.lastFrameTime) this.lastFrameTime = timestamp;
+                const deltaTime = timestamp - this.lastFrameTime;
+                this.lastFrameTime = timestamp;
+                
+                // 更新游戏状态
+                this.update(deltaTime);
+                
+                // 绘制游戏
+                this.draw();
+                
+                // 继续循环
+                requestAnimationFrame((t) => this.gameLoop(t));
+            }
+        }
+        
+        // 启动游戏
+        const game = new MazeGame();
+    </script>
+</body>
+</html>

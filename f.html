@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>迷宫</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #222;
+            color: white;
+            overflow-x: hidden;
+        }
+        
+        #gameContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        #maze {
+            font-family: monospace;
+            white-space: pre;
+            line-height: 1;
+            margin: 20px 0;
+            background-color: #111;
+            padding: 10px;
+            border-radius: 5px;
+            max-width: 100%;
+            overflow: auto;
+        }
+        
+        .player { color: yellow; }
+        .wall { color: #777; }
+        .exit { color: #0f0; }
+        .coin { color: gold; }
+        .monster { color: #f69; }
+        .boss { color: #f00; font-weight: bold; }
+        
+        #stats {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        #healthBar, #hungerBar {
+            height: 20px;
+            margin: 5px 0;
+            background-color: #333;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        
+        #healthBarFill {
+            height: 100%;
+            background-color: #f00;
+            width: 100%;
+        }
+        
+        #hungerBarFill {
+            height: 100%;
+            background-color: #0f0;
+            width: 100%;
+        }
+        
+        #controls {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 5px;
+            margin: 20px 0;
+            max-width: 200px;
+        }
+        
+        .control-btn {
+            background-color: #444;
+            color: white;
+            border: none;
+            padding: 15px;
+            font-size: 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .control-btn:active {
+            background-color: #666;
+        }
+        
+        #upBtn { grid-column: 2; grid-row: 1; }
+        #leftBtn { grid-column: 1; grid-row: 2; }
+        #rightBtn { grid-column: 3; grid-row: 2; }
+        #downBtn { grid-column: 2; grid-row: 3; }
+        
+        #shopBtn {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+        
+        #shop {
+            display: none;
+            background-color: rgba(0, 0, 0, 0.8);
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        
+        .shop-item {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 10px;
+            background-color: #333;
+            border-radius: 5px;
+        }
+        
+        .buy-btn {
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        
+        #levelInfo {
+            margin: 10px 0;
+            font-size: 18px;
+        }
+        
+        #completionMessage, #creditsScreen {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 100;
+            max-width: 80%;
+        }
+        
+        #fullGameBtn, #creditsContinueBtn {
+            background-color: #e74c3c;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            margin-top: 20px;
+            cursor: pointer;
+        }
+        
+        #deathScreen {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 100;
+        }
+        
+        .credits-content {
+            max-height: 60vh;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        
+        .credits-title {
+            font-size: 24px;
+            margin-bottom: 20px;
+            color: #3498db;
+        }
+        
+        .credits-section {
+            margin-bottom: 15px;
+        }
+        
+        .credits-name {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="stats">
+            <div>PLAYER</div>
+            <div>血量:</div>
+            <div id="healthBar"><div id="healthBarFill"></div></div>
+            <div>饱食度:</div>
+            <div id="hungerBar"><div id="hungerBarFill"></div></div>
+            <div>金币: <span id="coins">0</span></div>
+            <div>武器: <span id="weapon">无</span></div>
+            <div id="levelInfo">关卡: <span id="currentLevel">1</span>/16</div>
+        </div>
+        
+        <div id="maze"></div>
+        
+        <button id="shopBtn">商店</button>
+        <div id="shop">
+            <div class="shop-item">
+                <span>面包 (+20饱食度)</span>
+                <button class="buy-btn" onclick="buyItem('food')">5金币</button>
+            </div>
+            <div class="shop-item">
+                <span>药水 (+30血量)</span>
+                <button class="buy-btn" onclick="buyItem('potion')">10金币</button>
+            </div>
+            <div class="shop-item">
+                <span>匕首 (攻击+5)</span>
+                <button class="buy-btn" onclick="buyItem('dagger')">20金币</button>
+            </div>
+            <div class="shop-item">
+                <span>长剑 (攻击+10)</span>
+                <button class="buy-btn" onclick="buyItem('sword')">40金币</button>
+            </div>
+        </div>
+        
+        <div id="controls">
+            <button class="control-btn" id="upBtn">↑</button>
+            <button class="control-btn" id="leftBtn">←</button>
+            <button class="control-btn" id="rightBtn">→</button>
+            <button class="control-btn" id="downBtn">↓</button>
+        </div>
+    </div>
+    
+    <div id="completionMessage">
+        <h2>恭喜完成新手教程!</h2>
+        <p>你已经掌握了游戏的基本操作，准备好挑战16个1000×1000的超大迷宫了吗？</p>
+        <p>每个关卡都会比上一个更具挑战性，最后一关还有终极Boss等着你！</p>
+        <button id="fullGameBtn">进入完整游戏</button>
+    </div>
+    
+    <div id="deathScreen">
+        <h2>You're dead!</h2>
+        <button onclick="restartGame()">重新开始</button>
+    </div>
+    
+    <div id="creditsScreen">
+        <div class="credits-content">
+            <div class="credits-title">制作人员名单</div>
+            
+            <div class="credits-section">
+                <h3>游戏设计</h3>
+                <div class="credits-name">总设计师: 张三</div>
+                <div class="credits-name">关卡设计: 李四</div>
+                <div class="credits-name">游戏平衡: 王五</div>
+            </div>
+            
+            <div class="credits-section">
+                <h3>程序开发</h3>
+                <div class="credits-name">主程序员: 赵六</div>
+                <div class="credits-name">AI开发: 钱七</div>
+                <div class="credits-name">UI开发: 孙八</div>
+            </div>
+            
+            <div class="credits-section">
+                <h3>美术设计</h3>
+                <div class="credits-name">主美: 周九</div>
+                <div class="credits-name">角色设计: 吴十</div>
+            </div>
+            
+            <div class="credits-section">
+                <h3>特别感谢</h3>
+                <div class="credits-name">测试团队: Alpha测试组</div>
+                <div class="credits-name">技术支持: WebGL社区</div>
+            </div>
+            
+            <div class="credits-section">
+                <h3>献给所有勇敢的迷宫冒险者</h3>
+            </div>
+        </div>
+        <button id="creditsContinueBtn">返回主菜单</button>
+    </div>
+
+    <script>
+        // 游戏配置
+        const MAZE_SIZE = 1000; // 1000×1000的大地图
+        const VIEW_RADIUS = 15; // 视野范围
+        const TUTORIAL_LEVELS = 10; // 新手教程关卡数
+        const FULL_GAME_LEVELS = 16; // 完整游戏关卡数
+        
+        // 游戏状态
+        let maze = [];
+        let playerPos = { x: 1, y: 1 };
+        let exitPos = { x: 0, y: 0 };
+        let coins = 0;
+        let health = 100;
+        let maxHealth = 100;
+        let hunger = 100;
+        let maxHunger = 100;
+        let attackPower = 1;
+        let monsters = [];
+        let boss = null;
+        let coinPositions = [];
+        let currentLevel = 1;
+        let isTutorial = true;
+        let lastMoveTime = Date.now();
+        let gameActive = false;
+        
+        // 初始化游戏
+        function initGame() {
+            // 绑定控制按钮
+            document.getElementById('upBtn').addEventListener('click', () => movePlayer(0, -1));
+            document.getElementById('leftBtn').addEventListener('click', () => movePlayer(-1, 0));
+            document.getElementById('rightBtn').addEventListener('click', () => movePlayer(1, 0));
+            document.getElementById('downBtn').addEventListener('click', () => movePlayer(0, 1));
+            
+            document.getElementById('shopBtn').addEventListener('click', toggleShop);
+            document.getElementById('fullGameBtn').addEventListener('click', startFullGame);
+            document.getElementById('creditsContinueBtn').addEventListener('click', () => {
+                document.getElementById('creditsScreen').style.display = 'none';
+                resetGame();
+            });
+            
+            // 键盘控制
+            document.addEventListener('keydown', (e) => {
+                if (!gameActive) return;
+                
+                switch(e.key.toLowerCase()) {
+                    case 'w':
+                    case 'arrowup':
+                        movePlayer(0, -1);
+                        break;
+                    case 's':
+                    case 'arrowdown':
+                        movePlayer(0, 1);
+                        break;
+                    case 'a':
+                    case 'arrowleft':
+                        movePlayer(-1, 0);
+                        break;
+                    case 'd':
+                    case 'arrowright':
+                        movePlayer(1, 0);
+                        break;
+                    case 'e':
+                        toggleShop();
+                        break;
+                }
+            });
+            
+            // 开始新手教程
+            startTutorial();
+        }
+        
+        // 开始新手教程
+        function startTutorial() {
+            isTutorial = true;
+            currentLevel = 1;
+            document.getElementById('currentLevel').textContent = currentLevel;
+            document.getElementById('levelInfo').style.display = 'block';
+            generateLevel(20); // 新手教程使用20×20的小地图
+            gameActive = true;
+        }
+        
+        // 开始完整游戏
+        function startFullGame() {
+            document.getElementById('completionMessage').style.display = 'none';
+            isTutorial = false;
+            currentLevel = 1;
+            document.getElementById('currentLevel').textContent = currentLevel;
+            generateLevel(MAZE_SIZE); // 完整游戏使用1000×1000的大地图
+            gameActive = true;
+        }
+        
+        // 生成关卡
+        function generateLevel(size) {
+            maze = [];
+            monsters = [];
+            coinPositions = [];
+            boss = null;
+            
+            // 计算墙壁密度 (随关卡增加而增加)
+            const wallDensity = isTutorial ? 0.1 : 0.05 + (currentLevel * 0.01);
+            
+            // 创建迷宫
+            for (let y = 0; y < size; y++) {
+                maze[y] = [];
+                for (let x = 0; x < size; x++) {
+                    // 边界是墙
+                    if (x === 0 || y === 0 || x === size-1 || y === size-1) {
+                        maze[y][x] = '#';
+                    } else {
+                        // 随机生成墙和空地
+                        maze[y][x] = Math.random() < wallDensity ? '#' : ' ';
+                    }
+                }
+            }
+            
+            // 确保起点是空地
+            playerPos = { 
+                x: Math.floor(size * 0.1), 
+                y: Math.floor(size * 0.1) 
+            };
+            maze[playerPos.y][playerPos.x] = ' ';
+            
+            // 放置终点 (远离起点)
+            exitPos = {
+                x: Math.floor(size * 0.9),
+                y: Math.floor(size * 0.9)
+            };
+            maze[exitPos.y][exitPos.x] = 'X';
+            
+            // 放置金币 (数量随关卡增加)
+            const coinCount = isTutorial ? 10 : 20 + (currentLevel * 5);
+            for (let i = 0; i < coinCount; i++) {
+                const x = randomInt(1, size-2);
+                const y = randomInt(1, size-2);
+                if (maze[y][x] === ' ') {
+                    maze[y][x] = 'C';
+                    coinPositions.push({ x, y });
+                }
+            }
+            
+            // 放置怪物 (数量和强度随关卡增加)
+            const monsterCount = isTutorial ? 3 : 10 + (currentLevel * 2);
+            for (let i = 0; i < monsterCount; i++) {
+                const x = randomInt(1, size-2);
+                const y = randomInt(1, size-2);
+                if (maze[y][x] === ' ') {
+                    maze[y][x] = 'M';
+                    monsters.push({
+                        x, y,
+                        health: 20 + (currentLevel * 2),
+                        attack: 5 + currentLevel,
+                        speed: 1,
+                        detectionRange: 10 + (currentLevel * 0.5)
+                    });
+                }
+            }
+            
+            // 最后一关放置Boss
+            if (!isTutorial && currentLevel === FULL_GAME_LEVELS) {
+                const x = randomInt(1, size-2);
+                const y = randomInt(1, size-2);
+                if (maze[y][x] === ' ') {
+                    maze[y][x] = 'B';
+                    boss = {
+                        x, y,
+                        health: 200,
+                        attack: 30,
+                        speed: 1,
+                        detectionRange: 20
+                    };
+                }
+            }
+            
+            // 重置玩家状态 (保留金币和武器)
+            health = maxHealth;
+            hunger = maxHunger;
+            lastMoveTime = Date.now();
+            
+            // 渲染迷宫
+            renderMaze();
+            updateStats();
+        }
+        
+        // 渲染迷宫
+        function renderMaze() {
+            const mazeElement = document.getElementById('maze');
+            let mazeHTML = '';
+            
+            // 计算视野范围
+            const startX = Math.max(0, playerPos.x - VIEW_RADIUS);
+            const endX = Math.min(maze[0].length-1, playerPos.x + VIEW_RADIUS);
+            const startY = Math.max(0, playerPos.y - VIEW_RADIUS);
+            const endY = Math.min(maze.length-1, playerPos.y + VIEW_RADIUS);
+            
+            for (let y = startY; y <= endY; y++) {
+                for (let x = startX; x <= endX; x++) {
+                    if (x === playerPos.x && y === playerPos.y) {
+                        mazeHTML += '<span class="player">P</span>';
+                    } else {
+                        const cell = maze[y][x];
+                        
+                        if (cell === 'X') {
+                            mazeHTML += '<span class="exit">X</span>';
+                        } else if (cell === '#') {
+                            mazeHTML += '<span class="wall">#</span>';
+                        } else if (cell === 'C') {
+                            mazeHTML += '<span class="coin">C</span>';
+                        } else if (cell === 'M') {
+                            mazeHTML += '<span class="monster">M</span>';
+                        } else if (cell === 'B') {
+                            mazeHTML += '<span class="boss">B</span>';
+                        } else {
+                            mazeHTML += ' ';
+                        }
+                    }
+                }
+                mazeHTML += '\n';
+            }
+            
+            mazeElement.innerHTML = mazeHTML;
+        }
+        
+        // 更新状态显示
+        function updateStats() {
+            document.getElementById('coins').textContent = coins;
+            document.getElementById('healthBarFill').style.width = `${(health / maxHealth) * 100}%`;
+            document.getElementById('hungerBarFill').style.width = `${(hunger / maxHunger) * 100}%`;
+            document.getElementById('currentLevel').textContent = currentLevel;
+        }
+        
+        // 移动玩家
+        function movePlayer(dx, dy) {
+            if (!gameActive) return;
+            
+            const newX = playerPos.x + dx;
+            const newY = playerPos.y + dy;
+            
+            // 检查边界
+            if (newX < 0 || newY < 0 || newX >= maze[0].length || newY >= maze.length) {
+                return;
+            }
+            
+            // 检查是否是墙
+            if (maze[newY][newX] === '#') {
+                return;
+            }
+            
+            // 减少饱食度
+            hunger = Math.max(0, hunger - 1);
+            if (hunger === 0) {
+                health = Math.max(0, health - 2);
+            }
+            
+            // 检查是否是金币
+            if (maze[newY][newX] === 'C') {
+                coins += 10;
+                maze[newY][newX] = ' ';
+                coinPositions = coinPositions.filter(pos => !(pos.x === newX && pos.y === newY));
+            }
+            
+            // 检查是否是怪物
+            if (maze[newY][newX] === 'M') {
+                for (let i = 0; i < monsters.length; i++) {
+                    if (monsters[i].x === newX && monsters[i].y === newY) {
+                        // 攻击怪物
+                        monsters[i].health -= attackPower;
+                        
+                        // 怪物反击
+                        health -= monsters[i].attack;
+                        
+                        // 检查怪物是否死亡
+                        if (monsters[i].health <= 0) {
+                            monsters.splice(i, 1);
+                            maze[newY][newX] = ' ';
+                            coins += 10;
+                        }
+                        break;
+                    }
+                }
+            }
+            
+            // 检查是否是Boss
+            if (maze[newY][newX] === 'B' && boss) {
+                // 攻击Boss
+                boss.health -= attackPower;
+                
+                // Boss反击
+                health -= boss.attack;
+                
+                // 检查Boss是否死亡
+                if (boss.health <= 0) {
+                    maze[newY][newX] = ' ';
+                    boss = null;
+                    coins += 100;
+                }
+            }
+            
+            // 检查是否是出口
+            if (maze[newY][newX] === 'X') {
+                if (isTutorial) {
+                    // 新手教程完成
+                    if (currentLevel < TUTORIAL_LEVELS) {
+                        currentLevel++;
+                        document.getElementById('currentLevel').textContent = currentLevel;
+                        generateLevel(20);
+                        return;
+                    } else {
+                        // 完成所有新手教程
+                        gameActive = false;
+                        document.getElementById('completionMessage').style.display = 'block';
+                        return;
+                    }
+                } else {
+                    // 完整游戏关卡完成
+                    if (currentLevel < FULL_GAME_LEVELS) {
+                        currentLevel++;
+                        document.getElementById('currentLevel').textContent = currentLevel;
+                        generateLevel(MAZE_SIZE);
+                        return;
+                    } else {
+                        // 完成所有关卡，显示制作人员名单
+                        gameActive = false;
+                        document.getElementById('creditsScreen').style.display = 'flex';
+                        return;
+                    }
+                }
+            }
+            
+            // 更新玩家位置
+            playerPos = { x: newX, y: newY };
+            lastMoveTime = Date.now();
+            
+            // 移动怪物
+            moveMonsters();
+            
+            // 重新渲染
+            renderMaze();
+            updateStats();
+            
+            // 检查死亡
+            if (health <= 0) {
+                gameOver();
+            }
+        }
+        
+        // 移动怪物
+        function moveMonsters() {
+            const currentTime = Date.now();
+            
+            // 检查玩家是否长时间未移动
+            if (currentTime - lastMoveTime > 5000) { // 5秒未移动
+                // 所有怪物向玩家移动
+                monsters.forEach(monster => {
+                    moveTowardPlayer(monster);
+                });
+                
+                if (boss) {
+                    moveTowardPlayer(boss, true);
+                }
+            } else {
+                // 随机移动怪物
+                monsters.forEach(monster => {
+                    if (isPlayerInRange(monster)) {
+                        moveTowardPlayer(monster);
+                    } else {
+                        moveRandomly(monster);
+                    }
+                });
+                
+                if (boss && isPlayerInRange(boss, true)) {
+                    moveTowardPlayer(boss, true);
+                }
+            }
+        }
+        
+        // 检查玩家是否在怪物检测范围内
+        function isPlayerInRange(monster, isBoss = false) {
+            const range = monster.detectionRange;
+            const dx = Math.abs(monster.x - playerPos.x);
+            const dy = Math.abs(monster.y - playerPos.y);
+            return dx <= range && dy <= range;
+        }
+        
+        // 怪物向玩家移动
+        function moveTowardPlayer(monster, isBoss = false) {
+            const directions = [];
+            
+            // 确定最佳移动方向
+            if (monster.x < playerPos.x) directions.push({ dx: 1, dy: 0 });
+            if (monster.x > playerPos.x) directions.push({ dx: -1, dy: 0 });
+            if (monster.y < playerPos.y) directions.push({ dx: 0, dy: 1 });
+            if (monster.y > playerPos.y) directions.push({ dx: 0, dy: -1 });
+            
+            if (directions.length > 0) {
+                const { dx, dy } = directions[Math.floor(Math.random() * directions.length)];
+                const newX = monster.x + dx;
+                const newY = monster.y + dy;
+                
+                // 检查是否可以移动
+                if (newX >= 0 && newX < maze[0].length && newY >= 0 && newY < maze.length) {
+                    if (maze[newY][newX] === ' ' || maze[newY][newX] === 'P') {
+                        // 移动怪物
+                        maze[monster.y][monster.x] = ' ';
+                        monster.x = newX;
+                        monster.y = newY;
+                        maze[newY][newX] = isBoss ? 'B' : 'M';
+                        
+                        // 检查是否碰到玩家
+                        if (newX === playerPos.x && newY === playerPos.y) {
+                            health -= monster.attack;
+                            updateStats();
+                            
+                            if (health <= 0) {
+                                gameOver();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 怪物随机移动
+        function moveRandomly(monster) {
+            const directions = [
+                { dx: 1, dy: 0 },
+                { dx: -1, dy: 0 },
+                { dx: 0, dy: 1 },
+                { dx: 0, dy: -1 }
+            ];
+            
+            const { dx, dy } = directions[Math.floor(Math.random() * directions.length)];
+            const newX = monster.x + dx;
+            const newY = monster.y + dy;
+            
+            // 检查是否可以移动
+            if (newX >= 0 && newX < maze[0].length && newY >= 0 && newY < maze.length) {
+                if (maze[newY][newX] === ' ') {
+                    // 移动怪物
+                    maze[monster.y][monster.x] = ' ';
+                    monster.x = newX;
+                    monster.y = newY;
+                    maze[newY][newX] = 'M';
+                }
+            }
+        }
+        
+        // 游戏结束
+        function gameOver() {
+            gameActive = false;
+            document.getElementById('deathScreen').style.display = 'flex';
+        }
+        
+        // 重新开始游戏
+        function restartGame() {
+            document.getElementById('deathScreen').style.display = 'none';
+            resetGame();
+        }
+        
+        // 重置游戏
+        function resetGame() {
+            coins = 0;
+            health = maxHealth;
+            hunger = maxHunger;
+            attackPower = 1;
+            document.getElementById('weapon').textContent = '无';
+            startTutorial();
+        }
+        
+        // 切换商店显示
+        function toggleShop() {
+            const shop = document.getElementById('shop');
+            shop.style.display = shop.style.display === 'block' ? 'none' : 'block';
+        }
+        
+        // 购买物品
+        function buyItem(type) {
+            let cost = 0;
+            let success = false;
+            
+            switch(type) {
+                case 'food':
+                    cost = 5;
+                    if (coins >= cost) {
+                        coins -= cost;
+                        hunger = Math.min(maxHunger, hunger + 20);
+                        success = true;
+                    }
+                    break;
+                case 'potion':
+                    cost = 10;
+                    if (coins >= cost) {
+                        coins -= cost;
+                        health = Math.min(maxHealth, health + 30);
+                        success = true;
+                    }
+                    break;
+                case 'dagger':
+                    cost = 20;
+                    if (coins >= cost) {
+                        coins -= cost;
+                        attackPower = 5;
+                        document.getElementById('weapon').textContent = '匕首';
+                        success = true;
+                    }
+                    break;
+                case 'sword':
+                    cost = 40;
+                    if (coins >= cost) {
+                        coins -= cost;
+                        attackPower = 10;
+                        document.getElementById('weapon').textContent = '长剑';
+                        success = true;
+                    }
+                    break;
+            }
+            
+            if (success) {
+                updateStats();
+                renderMaze();
+            }
+        }
+        
+        // 辅助函数：生成随机整数
+        function randomInt(min, max) {
+            return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+        
+        // 初始化游戏
+        window.onload = initGame;
+    </script>
+</body>
+</html>
